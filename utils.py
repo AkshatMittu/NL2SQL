@@ -1,32 +1,20 @@
 import pandas as pd
 import random
-from datasets import load_dataset
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
-from tqdm import tqdm
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from huggingface_hub import login
-from jsonformer import Jsonformer
-import time
-from toon_format import encode, decode
-
+from toon_format import encode
 from mistralai import Mistral
-import os
+import torch
+import sqlite3
 
 import warnings
 warnings.filterwarnings('ignore')
 
-import re
-import torch
-
 torch.manual_seed(42)
 random.seed(42)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 print("Using device:", device)
 
 
+# Defining the API keys and other constants
 mistral_key = "pK73M6WZZa1a0vxqKK00o2ERf8aEnkQL"
 
 metadata = {
@@ -125,6 +113,7 @@ metadata = {
 ]
 }
 
+
 new_metadata = dict()
 for i in metadata['tables']:
   new_metadata[i['table_name']] = dict()
@@ -137,8 +126,8 @@ for i in new_metadata:
   metadata_toon += encode(new_metadata[i])
   metadata_toon += '\n\n'
 
-# Fetching KPIs in TOON format
 
+# Fetching KPIs in TOON format
 kpi_info = {
   "customer_lifetime_value": {
     "meaning": "Total premium revenue expected from a customer over their entire relationship with the insurer.",
@@ -238,11 +227,13 @@ kpi_info = {
   }
 }
 
+
 kpi_info_toon = ''
 for i in kpi_info:
   kpi_info_toon += f'{i}\n'
   kpi_info_toon += encode(kpi_info[i])
   kpi_info_toon += '\n\n'
+
 
 def use_mistral(prompt, model="mistral-large-2411"):
 
@@ -259,107 +250,104 @@ def use_mistral(prompt, model="mistral-large-2411"):
 
     return res.choices[0].message.content
 
-qwen_tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct", device_map='auto')
-qwen_model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", device_map='auto')
 
-knowledge_schema = {
-  "type": "object",
-  "properties": {
-    "Tables": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "description": "Name of a table that is required to answer the user's query."
-      },
-      "description": "List of tables that should be used in the SQL query."
-    },
-    "Columns": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "description": "Fully qualified column names that the SQL query must reference."
-      },
-      "description": "List of columns from the selected tables."
-    },
-    "Steps": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "description": "Step-by-step reasoning for building the SQL query."
-      },
-      "description": "Necessary steps to take to generate the SQL query."
-    }
-  },
-  "required": ["Tables", "Columns", "Steps"]
-}
 
 def get_args(nl_query, schema):
   return {"nl_query": nl_query,
           "schema": schema}
 
-def use_qwen(prompt, schema, max_number_tokens, max_string_token_length,
-            model=qwen_model, tokenizer=qwen_tokenizer):
+# Setting Up DB
+def colname_edit(text): 
+    text = text.lower().replace(" ", "_")
+    return text
 
-  model.resize_token_embeddings(len(tokenizer))
-  jsonformer = Jsonformer(
-                model,
-                tokenizer,
-                schema,
-                prompt,
-                max_number_tokens=max_number_tokens,
-                max_string_token_length=max_string_token_length,
-            )
-  output = jsonformer()
+def update_db(dir="data"):
+    conn = sqlite3.connect("insurancedata.db")
 
-  return output
+    data = ["agents.csv", "customers.csv", "policies.csv", "claims.csv", "submissions.csv"]
+
+    for i in data:
+        df = pd.read_csv(f"{dir}/{i}")
+        col_old = df.columns.tolist()
+        column_new = [colname_edit(col) for col in col_old] 
+        df.rename(columns=dict(zip(col_old, column_new)), inplace=True)       
+        table_name = i.split(".")[0]
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+    conn.commit()
+    conn.close()
+    print("Database updated successfully.")
+
+def run_query(query):
+  conn = sqlite3.connect("insurancedata.db")
+  cursor = conn.cursor()
+  cursor.execute(query)
+  rows = cursor.fetchall()
+  result = pd.DataFrame(rows, columns=[description[0] for description in cursor.description])
+  
+  conn.close()
+  return result
+    
+
 
 def prompts(prompt_type, args):
   nl_query = args['nl_query']
   
   if prompt_type == "knowledge":
     schema = args['schema']
+    kpi_used = args['kpi_used']
     prompt = f"""You are a insurance domain specialist, who provides knowledge and steps for the natural language query given to you so that these steps can used to convert this NL query to SQL query.
+Additionally, you will also be given the KPI information used in the NL query.
 Give good and detailed knowledge in 300 words for the schema given below.
 Your output should be in a JSON FORMAT and NO OTHER TEXT.
 
 This knowledge SHOULD include:
 - What tables to select
 - What columns to use
-- Steps to fetch and answer the query completely and correctly
+- Steps to fetch and answer the query completely and correctly. If KPI was used, include steps to do that in SQL as well
 
 Output format:
 {{
   Tables: list of tables that should be used,
   Columns: List of columns from each table,
-  Steps: Necessary steps to take to generate the SQL query.
+  Steps: Necessary steps to take to generate the SQL query, include how to approach the KPI formula if KPI was used.
 }}
 
 Schema:
 {schema}
+
+KPI Information:
+{kpi_used}
 
 Natural Language Query:
 {nl_query}
 """
   
   if prompt_type == "relevance":
-    prompt = f"""You are a insurance domain specialist, you'll be given a natural language query.
+    kpi_info_args = args['kpi']
+    prompt = f"""You are a insurance domain specialist, you'll be given a natural language query and KPIs related to the domain.
 Your task is to check if this natural language query is relevant to insurance domain or not, so that if it is relevant the downstream task will be to convert this natural language query to SQL.
+If the natural language query asks or uses any KPI, give that KPI information as well else give None.
 You should also explain your choice.
 Your output should be in JSON FORMAT and NO OTHER TEXT.
+
+KPIs:
+{kpi_info_args}
 
 Output Format:
 {{
   relevance: Yes/No,
-  explanation: Explain why you chose yes or no
+  explanation: Explain why you chose yes or no.
+  kpi: If a KPI is used give formula and information related to that KPI, else give None.
 }}
 
 Natural Language Query:
 {nl_query}
 """
+  
   if prompt_type == "sql":
     knowledge = args['knowledge']
     fetched_schema = args['req_schema']
-    prompt = f"""You are a insurance domain specialist, you'll be given a natural language query and steps to generate the SQL query.
+    prompt = f"""You are a Insurance SQL Analyst, you'll be given a natural language query and steps to generate the SQL query.
 Your task is to convert this natural language query to SQL.
 
 Your output should be in a JSON format and NO OTHER TEXT.
@@ -372,6 +360,7 @@ Columns to use:
 Steps to generate SQL query: 
 {knowledge['Steps']}
 
+
 Schema of these tables:
 {fetched_schema}
 
@@ -383,8 +372,111 @@ Output Format:
 Natural Language Query:
 {nl_query}
 """
+  if prompt_type == "reverse":
+    sql_query = args['sql_query']
+    prompt = f"""You are an Insurance domain SQL query analyst and guide. 
+You will be given an SQL query and your job is to clearly describe what that query is doing tying it to the insurance domain.
 
+Your output should only be the explanation of the SQL query and NO OTHER TEXT.
+
+SQL Query:
+{sql_query}
+    """
+  
+  if prompt_type == "sql_logical":
+    sql_query = args['sql_query']
+    fetched_schema = args['req_schema']
+    knowledge = args['knowledge']
+    reverse = args['reverse']
+    prompt = f"""You are an Insurance domain SQL query analyst and guide.
+You will be given a natural language query, its generated SQL query and the text description of that the SQL query is doing.
+You'll also be given the tables and their schemas, and columns in SQL along with the steps used in generating SQL query that answer's the natural language query.
+
+Use this information and check if the text description answers the natural language query or not, additionally also give the correct the SQL query if it is wrong.
+
+Your output should be in a JSON format and NO OTHER TEXT.
+
+Output Format:
+{{
+  correct: Yes/No,
+  corrected_sql_query: If no, give the corrected SQL query to better answer the natural language query. If yes, None
+}}
+
+
+Tables to use: {knowledge['Tables']}
+
+Columns to use: 
+{encode(knowledge['Columns'])}
+
+Steps to generate SQL query: 
+{f"""{knowledge['Steps']}"""}
+
+Schema of these tables:
+{fetched_schema}
+
+Natural Language Query:
+{nl_query}
+
+SQL Query:
+{sql_query}
+
+Explanation of SQL query as text:
+{reverse}
+
+"""
+  
+  if prompt_type == "sql_syntax":
+    sql_query = args['sql_query']
+    syn_sug = args['syn_sug']
+    prompt = f"""You are an SQL query generator who reflects on their own mistakes and gives out the correct query.
+You will be given the natural language query which was converted to SQL query in the previous iteration, the SQL query and the suggestions to correct the syntax error that occured previously.
+Your job is to go through the given information and correct the SQL query syntactically.
+
+Your output should be in a JSON format and NO OTHER TEXT.
+
+Output Format:
+{{
+  corrected_sql_query: Executable SQL query to answer the natural language query.
+}}
+
+Natural Language Query:
+{nl_query}
+    
+SQL Query:
+{sql_query}
+
+Suggestion to correct error occured previously: 
+{syn_sug}
+    
+    """
+
+  if prompt_type == "syntax":
+    error = args['syntax']
+    sql_query = args['sql_query']
+    fetched_schema = args['req_schema']
+    knowledge = args['knowledge']
+    prompt = f"""You are an evaluator and a guide for SQL query executions. You'll be given a natural language query, the SQL query for it that faced an error, tables and their schema, and columns that the SQL query is using to answer the natural language query.
+Your job is to suggest revisions to the SQL query to ensure safe execution of the SQL query generated from the natural language query.
+
+Tables to use: {knowledge['Tables']}
+
+Columns to use: 
+{encode(knowledge['Columns'])}
+
+Steps to generate SQL query: 
+{knowledge['Steps']}
+
+Schema of these tables:
+{fetched_schema}
+
+Natural Language Query:
+{nl_query}
+
+SQL Query:
+{sql_query}
+
+Error:
+{error}
+"""
 
   return prompt
-
-
