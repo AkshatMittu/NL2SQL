@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NL → SQL Query App</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px; }
+        .container { max-width: 700px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; margin-bottom: 30px; }
+        input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #bbb; font-size: 16px; }
+        button { width: 100%; padding: 12px; background: #4a90e2; border: none; border-radius: 8px; color: white; font-size: 17px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #3a78c2; }
+        .section { margin-top: 25px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #eee; }
+        pre { background: #1e1e1e; color: #eaeaea; padding: 15px; border-radius: 6px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; border: 1px solid #ddd; }
+        th { background: #eaeaea; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NL → SQL Query App</h1>
+
+        <input id="nlQuery" type="text" placeholder="Enter your natural language query" />
+        <button onclick="runQuery()">Run NL → SQL</button>
+
+        <button onclick="updateDB()" style="background:#27ae60; margin-top:15px;">Update Database</button>
+
+        <div id="sqlSection" class="section" style="display:none;"></div>
+        <div id="resultSection" class="section" style="display:none;"></div>
+        <div id="updateSection" class="section" style="display:none;"></div>
+    </div>
+
+    <script>
+        async function updateDB() {
+            const res = await fetch("/update_db", { method: "POST" });
+            const data = await res.json();
+            document.getElementById("updateSection").style.display = "block";
+            document.getElementById("updateSection").innerHTML = `<strong>${data.status}</strong>`;
+        }
+
+        async function runQuery() {
+            const query = document.getElementById("nlQuery").value.trim();
+            if (!query) return;
+
+            const res = await fetch("/run_query", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query })
+            });
+
+            const data = await res.json();
+
+            document.getElementById("sqlSection").style.display = "block";
+            document.getElementById("sqlSection").innerHTML = `
+                <h3>Generated SQL Query:</h3>
+                <pre>${data.sql_query}</pre>
+            `;
+
+            const df = data.result;
+            let tableHTML = "<h3>Results:</h3><table><tr>";
+            if (df.length > 0) {
+                Object.keys(df[0]).forEach(col => { tableHTML += `<th>${col}</th>`; });
+                tableHTML += "</tr>";
+                df.forEach(row => {
+                    tableHTML += "<tr>";
+                    Object.values(row).forEach(val => { tableHTML += `<td>${val}</td>`; });
+                    tableHTML += "</tr>";
+                });
+            }
+            tableHTML += "</table>";
+            document.getElementById("resultSection").style.display = "block";
+            document.getElementById("resultSection").innerHTML = tableHTML;
+        }
+    </script>
+</body>
+</html>
