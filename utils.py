@@ -3,6 +3,7 @@ import random
 from toon_format import encode
 from mistralai import Mistral
 import torch
+import os
 import sqlite3
 
 import warnings
@@ -235,7 +236,7 @@ for i in kpi_info:
   kpi_info_toon += '\n\n'
 
 
-def use_mistral(prompt, model="mistral-large-2411"):
+def use_mistral(prompt, model="mistral-large-2411", op_type="json_object"):
 
   with Mistral(
     api_key=mistral_key,
@@ -246,15 +247,16 @@ def use_mistral(prompt, model="mistral-large-2411"):
             "content": prompt,
             "role": "user",
         },
-    ], stream=False)
+    ], response_format= { "type": op_type }, stream=False)
 
     return res.choices[0].message.content
 
 
 
-def get_args(nl_query, schema):
+def get_args(nl_query, schema, kpi_info_toon):
   return {"nl_query": nl_query,
-          "schema": schema}
+          "schema": schema,
+          "kpi": kpi_info_toon}
 
 # Setting Up DB
 def colname_edit(text): 
@@ -264,7 +266,8 @@ def colname_edit(text):
 def update_db(dir="data"):
     conn = sqlite3.connect("insurancedata.db")
 
-    data = ["agents.csv", "customers.csv", "policies.csv", "claims.csv", "submissions.csv"]
+    # data = ["agents.csv", "customers.csv", "policies.csv", "claims.csv", "submissions.csv"]
+    data = os.listdir(dir)
 
     for i in data:
         df = pd.read_csv(f"{dir}/{i}")
@@ -399,7 +402,7 @@ Your output should be in a JSON format and NO OTHER TEXT.
 Output Format:
 {{
   correct: Yes/No,
-  corrected_sql_query: If no, give the corrected SQL query to better answer the natural language query. If yes, None
+  corrected_sql_query: If no, give the corrected SQL query to better answer the natural language query. If yes, repeat the same SQL query.
 }}
 
 
