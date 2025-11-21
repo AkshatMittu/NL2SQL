@@ -39,7 +39,7 @@ Enable users to ask plain English questions and get **correct SQL**, even withou
 - Syntax + semantic validation using LLM-as-Judge  
 
 
-## ⚙️ Tech
+### Tech
 - Model: `mistral-large-2411`  
 - Avg runtime: ~20s/query  
 - 7 LLM calls per query  
@@ -47,8 +47,8 @@ Enable users to ask plain English questions and get **correct SQL**, even withou
 
 ---
 
-## 🙌 Team
+### Team
 - Anjali Vemula (6076947)  
 - Akshat Dasula (5979761)  
-## 📦 Files
+### Files
 - Presentation: `NL2SQL 70-30.pptx`
