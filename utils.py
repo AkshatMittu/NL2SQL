@@ -16,7 +16,7 @@ print("Using device:", device)
 
 
 # Defining the API keys and other constants
-mistral_key = "pK73M6WZZa1a0vxqKK00o2ERf8aEnkQL"
+mistral_key = "139Pm7bUuU1EOnpI7lPaSIa8zvXDsFh0"
 
 metadata = {
   "tables": [
@@ -58,8 +58,8 @@ metadata = {
     "premium_amount": "Premium amount charged for the policy in USD (integer)",
     "coverage_amount": "Coverage amount provided by the policy in USD (integer)",
     "policy_duration_years": "Duration of the policy in years (integer)",
-    "policy_start_year": "Start year of the policy (integer, e.g., 2015–2024)",
-    "policy_end_year": "End year of the policy (integer)",
+    "policy_start_date": "Start year of the policy (integer, e.g., 2015–2024)",
+    "policy_end_date": "End year of the policy (integer)",
     "policy_risk_level": "Risk level assigned to the policy, categorical, values: ['low', 'medium', 'high']",
     "policy_status": "Current status of the policy, categorical, values: ['active', 'inactive']"
         }
@@ -351,7 +351,7 @@ Natural Language Query:
     knowledge = args['knowledge']
     fetched_schema = args['req_schema']
     prompt = f"""You are a Insurance SQL Analyst, you'll be given a natural language query and steps to generate the SQL query.
-Your task is to convert this natural language query to SQL.
+Your task is to convert this natural language query to SQL. Return a case insensitive single line SQL query.
 
 Your output should be in a JSON format and NO OTHER TEXT.
 
@@ -395,7 +395,7 @@ SQL Query:
 You will be given a natural language query, its generated SQL query and the text description of that the SQL query is doing.
 You'll also be given the tables and their schemas, and columns in SQL along with the steps used in generating SQL query that answer's the natural language query.
 
-Use this information and check if the text description answers the natural language query or not, additionally also give the correct the SQL query if it is wrong.
+Use this information and check if the text description answers the natural language query or not, additionally also give the correct, case insensitive single line SQL query if it is wrong.
 
 Your output should be in a JSON format and NO OTHER TEXT.
 
@@ -432,8 +432,8 @@ Explanation of SQL query as text:
     sql_query = args['sql_query']
     syn_sug = args['syn_sug']
     prompt = f"""You are an SQL query generator who reflects on their own mistakes and gives out the correct query.
-You will be given the natural language query which was converted to SQL query in the previous iteration, the SQL query and the suggestions to correct the syntax error that occured previously.
-Your job is to go through the given information and correct the SQL query syntactically.
+You will be given the natural language query which was converted to SQL query in the previous iteration, the SQL query, database schema and the suggestions to correct the syntax error that occured previously.
+Your job is to go through the given information and correct the SQL query syntactically. Return a case insensitive single line SQL query.
 
 Your output should be in a JSON format and NO OTHER TEXT.
 
@@ -441,6 +441,9 @@ Output Format:
 {{
   corrected_sql_query: Executable SQL query to answer the natural language query.
 }}
+
+Database Schema:
+{metadata_toon}
 
 Natural Language Query:
 {nl_query}
@@ -458,7 +461,7 @@ Suggestion to correct error occured previously:
     sql_query = args['sql_query']
     fetched_schema = args['req_schema']
     knowledge = args['knowledge']
-    prompt = f"""You are an evaluator and a guide for SQL query executions. You'll be given a natural language query, the SQL query for it that faced an error, tables and their schema, and columns that the SQL query is using to answer the natural language query.
+    prompt = f"""You are an evaluator and a guide for SQL query executions. You'll be given a natural language query, the SQL query for it that faced an error, tables, the schema of the entire database, and columns that the SQL query is using to answer the natural language query.
 Your job is to suggest revisions to the SQL query to ensure safe execution of the SQL query generated from the natural language query.
 
 Tables to use: {knowledge['Tables']}
@@ -469,8 +472,8 @@ Columns to use:
 Steps to generate SQL query: 
 {knowledge['Steps']}
 
-Schema of these tables:
-{fetched_schema}
+Database Schema:
+{metadata_toon}
 
 Natural Language Query:
 {nl_query}

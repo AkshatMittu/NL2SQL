@@ -135,8 +135,15 @@ def nl2sql(nl_query):
         sql_query = sql_query_sample
         args['sql_query'] = sql_query
         continue
-      
+    
+    else:
+      print("Max Trials Exhausted. Returning last result.")
+      result = run_query(sql_query)
+      print("Results Fetched:")
+      print(result)
+      print("--------------------------------------------------")  
   return sql_query, result
+
 
 
 # a,b = nl2sql(nl_query)
