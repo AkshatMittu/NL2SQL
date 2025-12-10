@@ -1,6 +1,6 @@
 ## NL2SQL
 
-Convert natural-language questions into **accurate, executable SQL** for insurance data. Unlike one-shot LLMs, this system uses **domain filtering, schema guidance, and iterative error correction**.
+Convert natural-language questions into **accurate, executable SQL** for insurance data. Unlike one-shot LLMs, this system uses **person-based, domain filtering, schema guidance, and iterative error correction**.
 
 ### Motivation
 - Insurance data is vast but SQL expertise is limited.  
