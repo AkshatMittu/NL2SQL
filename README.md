@@ -43,8 +43,19 @@ Enable users to ask plain English questions and get **correct SQL**, even withou
 - Model: `mistral-large-2411`  
 - Avg runtime: ~20s/query  
 - 7 LLM calls per query  
-- LLM roles: Domain Specialist, SQL Analyst, Judge  
+- LLM roles: Domain Specialist, SQL Analyst, Judge
 
+
+### How to Run
+ - Make sure the Mistral API key is still working.
+ - Install packages/dependencies using
+   """
+   pip install -r requirements.txt
+   """
+- Finally, run `main.py` using
+  """
+  python main.py
+  """
 ---
 
 ### Team
