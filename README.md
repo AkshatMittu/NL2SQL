@@ -49,7 +49,7 @@ Enable users to ask plain English questions and get **correct SQL**, even withou
 ### How to Run
  - Make sure the Mistral API key is still working.
  - Install packages/dependencies using `pip install -r requirements.txt`
-- Finally, run `main.py` using `python main.py`
+- Finally, run `app.py` using `python app.py`
 
 ---
 
